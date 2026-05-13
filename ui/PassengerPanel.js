@@ -334,6 +334,41 @@ class PassengerPanel {
         </div>` : ''}
       `;
       container.appendChild(card);
+
+      // ++ VALIDACIÓN ++ // Restricción en tiempo real para el campo Nº documento
+      const docInput = document.getElementById(`pax_numDoc_${i}`);
+      const tipoSelect = document.getElementById(`pax_tipoDoc_${i}`);
+      if (docInput && tipoSelect) {
+        const restringirDoc = () => {
+          const tipo = tipoSelect.value;
+          let valor = docInput.value;
+          // Cédula y Partida: solo números
+          if (tipo === 'CEDULA' || tipo === 'PARTIDA') {
+            valor = valor.replace(/\D/g, '');
+          }
+          // Pasaporte: letras y números (y quizás guiones, según el país)
+          else {
+            valor = valor.replace(/[^a-zA-Z0-9]/g, '');
+          }
+          docInput.value = valor;
+        };
+        tipoSelect.addEventListener('change', restringirDoc);
+        docInput.addEventListener('input', restringirDoc);
+      }
+
+      // ++ VALIDACIÓN ++ // Restricción para nombres y apellidos (solo letras y espacios)
+      const nombreInput = document.getElementById(`pax_nombre_${i}`);
+      const apellidoInput = document.getElementById(`pax_apellido_${i}`);
+      if (nombreInput) {
+        nombreInput.addEventListener('input', () => {
+          nombreInput.value = nombreInput.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '');
+        });
+      }
+      if (apellidoInput) {
+        apellidoInput.addEventListener('input', () => {
+          apellidoInput.value = apellidoInput.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '');
+        });
+      }
     });
   }
 
@@ -357,11 +392,21 @@ class PassengerPanel {
       if (!nombre || !apellido) {
         this.mostrarMensaje(`${label}: ingrese nombre y apellido.`, 'error'); return;
       }
+      // ++ VALIDACIÓN ++ // Caracteres no permitidos en nombre/apellido
+      if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/.test(nombre) || !/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/.test(apellido)) {
+        this.mostrarMensaje(`${label}: nombre y apellido solo pueden contener letras y espacios.`, 'error'); return;
+      }
+
       if (!genero) {
         this.mostrarMensaje(`${label}: seleccione el género.`, 'error'); return;
       }
       if (!tipoDoc || !numDoc) {
         this.mostrarMensaje(`${label}: complete los datos del documento.`, 'error'); return;
+      }
+
+      // ++ VALIDACIÓN ++ // Formato del documento según tipo
+      if (!this._validarDocumento(tipoDoc, numDoc, label)) {
+        return; // _validarDocumento ya muestra el mensaje de error
       }
 
       const needsRep = pax.categoria === 'CHD' || pax.categoria === 'INF';
@@ -398,6 +443,49 @@ class PassengerPanel {
     this._renderizarTabs();
     this.renderizarMapa();
     this._actualizarBotonesAsiento();
+  }
+
+  // ++ VALIDACIÓN ++ // Método para verificar el formato del número de documento
+  _validarDocumento(tipo, numero, label) {
+    switch (tipo) {
+      case 'CEDULA':
+        // Solo dígitos, longitud mínima 6, máxima 10 (ajustable según país)
+        if (!/^\d+$/.test(numero)) {
+          this.mostrarMensaje(`${label}: la cédula debe contener solo números.`, 'error');
+          return false;
+        }
+        if (numero.length < 6 || numero.length > 10) {
+          this.mostrarMensaje(`${label}: la cédula debe tener entre 6 y 10 dígitos.`, 'error');
+          return false;
+        }
+        break;
+      case 'PASAPORTE':
+        // Letras y números, sin espacios, longitud 5-20
+        if (!/^[a-zA-Z0-9]+$/.test(numero)) {
+          this.mostrarMensaje(`${label}: el pasaporte solo permite letras y números.`, 'error');
+          return false;
+        }
+        if (numero.length < 5 || numero.length > 20) {
+          this.mostrarMensaje(`${label}: verifique la longitud del pasaporte (5-20 caracteres).`, 'error');
+          return false;
+        }
+        break;
+      case 'PARTIDA':
+        // Similar a cédula (generalmente numérica)
+        if (!/^\d+$/.test(numero)) {
+          this.mostrarMensaje(`${label}: la partida de nacimiento debe contener solo números.`, 'error');
+          return false;
+        }
+        if (numero.length < 6 || numero.length > 15) {
+          this.mostrarMensaje(`${label}: la partida de nacimiento debe tener entre 6 y 15 dígitos.`, 'error');
+          return false;
+        }
+        break;
+      default:
+        this.mostrarMensaje(`${label}: tipo de documento no reconocido.`, 'error');
+        return false;
+    }
+    return true;
   }
 
   // ─── Paso 3: asientos ────────────────────────────────────────────────────
@@ -438,10 +526,8 @@ class PassengerPanel {
     const display    = document.getElementById('currentSeatDisplay');
     if (!pax) return;
 
-    // Mostrar confirmar solo si hay asiento elegido y aún no está guardado
     confirmBtn.style.display = (pax.asientoSeleccionado && !pax.reservaExistente)
       ? 'inline-flex' : 'none';
-    // Mostrar cancelar solo si tiene reserva guardada
     cancelBtn.style.display  = pax.reservaExistente ? 'inline-flex' : 'none';
     display.textContent = pax.asientoSeleccionado
       ? `${this._paxLabel(pax, this.pasajeros.indexOf(pax))}: ${pax.asientoSeleccionado}`
@@ -502,7 +588,6 @@ class PassengerPanel {
     const categoria = paxActivo?.categoria ?? 'ADT';
 
     const ssrRestringido = ['WCHR','WCHC','BLND','DEAF','MEDA'].includes(ssr);
-    // ✅ Restricción de emergencia: CHD, SEN, cualquier SSR activo
     const restriccionEmergencia =
       categoria === 'CHD' ||
       categoria === 'SEN' ||
@@ -545,7 +630,6 @@ class PassengerPanel {
       `;
       document.getElementById('seatMapContainer').after(el);
     }
-    // Primera clase: 2 filas × 4 asientos = 8; Económica: 20 filas × 6 = 120
     const total      = 8 + 120;
     const disponibles = total - ocupados.size;
     const enGrupo    = this._paxConAsiento()
@@ -598,7 +682,6 @@ class PassengerPanel {
     if (esMio)             el.classList.add('selected');
     if (bloqueado)         el.classList.add('restricted');
 
-    // Tooltip
     if (bloqueado) {
       el.title = categoria === 'SEN' ? 'No disponible: tercera edad'
         : categoria === 'CHD'        ? 'No disponible: menor de edad'
@@ -699,7 +782,6 @@ class PassengerPanel {
         background:#fff;border-radius:1.2rem;width:100%;max-width:800px;
         box-shadow:0 25px 60px rgba(0,0,0,0.35);overflow:hidden;
       ">
-        <!-- Cabecera -->
         <div style="background:linear-gradient(135deg,#1e40af,#2563eb);padding:2rem;color:#fff;">
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
             <div>
@@ -713,7 +795,6 @@ class PassengerPanel {
           </div>
         </div>
 
-        <!-- Datos del vuelo -->
         <div style="padding:1.5rem 2rem;border-bottom:1px solid #e2e8f0;">
           <div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.07em;
                       color:#64748b;font-weight:700;margin-bottom:0.8rem;">📋 Datos del vuelo</div>
@@ -743,7 +824,6 @@ class PassengerPanel {
           ${tramosHtml}
         </div>
 
-        <!-- Tabla pasajeros -->
         <div style="padding:1.5rem 2rem;">
           <div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.07em;
                       color:#64748b;font-weight:700;margin-bottom:0.8rem;">👥 Pasajeros y asientos</div>
@@ -768,13 +848,11 @@ class PassengerPanel {
           </div>
         </div>
 
-        <!-- Nota -->
         <div style="padding:0 2rem 1rem;font-size:0.78rem;color:#94a3b8;">
           ⚠️ La reserva puede cancelarse antes de que el vuelo pase a "En abordaje".
           Preséntese con documento de identidad original.
         </div>
 
-        <!-- Botones -->
         <div style="padding:1.2rem 2rem 1.8rem;display:flex;gap:1rem;flex-wrap:wrap;
                     border-top:1px solid #e2e8f0;">
           <button onclick="window.print()">🖨️ Imprimir comprobante</button>
