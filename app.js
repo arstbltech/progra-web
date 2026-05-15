@@ -1,4 +1,6 @@
 // Punto de entrada: crea la aplicación y los paneles
+// Exponer variables globalmente para depuración y acceso desde consola
+let app, flightManager, adminPanel, passengerPanel;
 
 class App {
   constructor() {
@@ -57,6 +59,12 @@ class App {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const app = new App();
+  app = new App();
   app.iniciar();
-});
+  
+  // Exponer globalmente
+  window.app = app;
+  window.flightManager = app.manager;
+  window.adminPanel = app.adminPanel;
+  window.passengerPanel = app.passengerPanel;
+})

@@ -5,28 +5,66 @@ class FlightManager {
     this.vuelos = [];
     this.cargar();
   }
+  cancelarVuelo(id, motivo = null) {
+    const vuelo = this.getVuelo(id);
+    if (!vuelo) {
+      console.warn(`⚠️ Vuelo #${id} no encontrado para cancelar`);
+      return { exito: false, mensaje: 'Vuelo no encontrado.' };
+    }
 
+    if (vuelo.estado === 'cancelado') {
+      console.warn(`⚠️ El vuelo #${id} ya está cancelado`);
+      return { exito: false, mensaje: 'El vuelo ya fue cancelado anteriormente.' };
+    }
+
+    if (vuelo.estado === 'finalizado') {
+      console.warn(`⚠️ El vuelo #${id} ya está finalizado`);
+      return { exito: false, mensaje: 'No se puede cancelar un vuelo que ya ha finalizado.' };
+    }
+
+    const estadoAnterior = vuelo.estado;
+    const cantidadReservas = vuelo.reservas.length;
+
+    // Marcar el vuelo como cancelado (no se elimina para auditoría)
+    vuelo.estado = 'cancelado';
+    vuelo.motivoCancelacion = motivo || 'Cancelado por administración';
+    
+    // Cancelar todas las reservas asociadas
+    vuelo.reservas = [];
+
+    const guardado = this.guardar();
+
+    if (guardado) {
+      console.log(`❌ Vuelo #${id} cancelado (estado: ${estadoAnterior} → cancelado, ${cantidadReservas} reservas eliminadas)`);
+      return { exito: true, mensaje: `Vuelo #${id} cancelado. Se eliminaron ${cantidadReservas} reservas.` };
+    } else {
+      // Revertir si falla el guardado
+      vuelo.estado = estadoAnterior;
+      console.error('❌ No se pudo guardar la cancelación del vuelo');
+      return { exito: false, mensaje: 'Error al guardar los cambios.' };
+    }
+  }
   cargar() {
     const data = localStorage.getItem('vuelos_universidad');
     if (data) {
       try {
         const raw = JSON.parse(data);
         this.vuelos = raw.map(v => {
-          // Reconstruir el vuelo
           const vuelo = new Vuelo(v.id, v.fecha, v.estado);
           
-          // Reconstruir los tramos
+          if (v.motivoCancelacion) {
+            vuelo.motivoCancelacion = v.motivoCancelacion;
+          }
+
           vuelo.tramos = (v.tramos || []).map(t => 
             new Tramo(t.origen, t.destino, t.horaSalida, t.duracionMinutos)
           );
           
-          // Si no hay tramos pero hay datos antiguos (compatibilidad hacia atrás)
           if (vuelo.tramos.length === 0 && v.origen && v.destino && v.horaSalida) {
             const duracion = v.duracionMinutos || 120;
             vuelo.tramos = [new Tramo(v.origen, v.destino, v.horaSalida, duracion)];
           }
           
-          // Reconstruir las reservas
           vuelo.reservas = (v.reservas || []).map(r => {
             const pasajero = new Pasajero(
               r.pasajero.nombre,
@@ -58,13 +96,13 @@ class FlightManager {
         id: v.id,
         fecha: v.fecha,
         estado: v.estado,
+        motivoCancelacion: v.motivoCancelacion || null,
         tramos: v.tramos.map(t => ({
           origen: t.origen,
           destino: t.destino,
           horaSalida: t.horaSalida,
           duracionMinutos: t.duracionMinutos
         })),
-        // Incluir también los campos directos para compatibilidad
         origen: v.origen,
         destino: v.destino,
         horaSalida: v.horaSalida,
@@ -123,33 +161,38 @@ class FlightManager {
   cambiarEstado(id, nuevoEstado) {
     const v = this.getVuelo(id);
     if (!v) return false;
-    
-    const estadosValidos = ['programado', 'en abordaje', 'finalizado'];
+
+    if (v.estado === 'cancelado') {
+      console.error(`❌ No se puede cambiar el estado de un vuelo cancelado`);
+      return false;
+    }
+
+    const estadosValidos = ['programado', 'en abordaje', 'finalizado', 'cancelado'];
     if (!estadosValidos.includes(nuevoEstado)) {
       console.error(`❌ Estado inválido: ${nuevoEstado}`);
       return false;
     }
-    
-    // Validar transiciones de estado
+
     const transiciones = {
-      'programado': ['en abordaje'],
-      'en abordaje': ['finalizado'],
-      'finalizado': []
+      'programado': ['en abordaje', 'cancelado'],
+      'en abordaje': ['finalizado', 'cancelado'],
+      'finalizado': [],
+      'cancelado': []
     };
-    
+
     if (!transiciones[v.estado].includes(nuevoEstado)) {
       console.error(`❌ Transición inválida: ${v.estado} → ${nuevoEstado}`);
       return false;
     }
-    
+
     const estadoAnterior = v.estado;
     v.estado = nuevoEstado;
     const guardado = this.guardar();
-    
+
     if (guardado) {
       console.log(`✅ Vuelo #${id}: ${estadoAnterior} → ${nuevoEstado}`);
     }
-    
+
     return guardado;
   }
 
@@ -303,3 +346,4 @@ class FlightManager {
     });
   }
 }
+

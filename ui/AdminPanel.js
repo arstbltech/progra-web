@@ -348,13 +348,16 @@ class AdminPanel {
       let badge = '';
       if (v.estado === 'programado') badge = '<span class="badge">Programado</span>';
       else if (v.estado === 'en abordaje') badge = '<span class="badge warning">En abordaje</span>';
+      else if (v.estado === 'cancelado') badge = '<span class="badge danger">Cancelado</span>';
       else badge = '<span class="badge success">Finalizado</span>';
 
       let botones = '';
       if (v.estado === 'programado') {
-        botones = `<button class="secondary" data-action="boarding" data-id="${v.id}">Iniciar abordaje</button>`;
+        botones = `<button class="secondary action-btn" data-action="boarding" data-id="${v.id}">Iniciar abordaje</button>`;
+        botones += `<button class="danger action-btn" data-action="cancel" data-id="${v.id}">Cancelar</button>`;
       } else if (v.estado === 'en abordaje') {
-        botones = `<button class="danger" data-action="finalize" data-id="${v.id}">Finalizar vuelo</button>`;
+        botones = `<button class="secondary action-btn" data-action="finalize" data-id="${v.id}">Finalizar</button>`;
+        botones += `<button class="danger action-btn" data-action="cancel" data-id="${v.id}">Cancelar</button>`;
       }
 
       const duracionMin = v.duracionTotalMinutos;
@@ -379,15 +382,21 @@ class AdminPanel {
     });
     html += '</tbody></table>';
     tabla.innerHTML = html;
-
     tabla.querySelectorAll('button[data-action]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const id = parseInt(btn.dataset.id);
         const action = btn.dataset.action;
         if (action === 'boarding') {
-          this.manager.cambiarEstado(id, 'en abordaje');
+          if (confirm('¿Iniciar proceso de abordaje para este vuelo?')) {
+            this.manager.cambiarEstado(id, 'en abordaje');
+          }
         } else if (action === 'finalize') {
-          this.manager.cambiarEstado(id, 'finalizado');
+          if (confirm('¿Finalizar el vuelo? Esta acción no se puede revertir.')) {
+            this.manager.cambiarEstado(id, 'finalizado');
+          }
+        } else if (action === 'cancel') {
+          const motivo = prompt('Ingrese el motivo de la cancelación (opcional):');
+          this.manager.cancelarVuelo(id, motivo);
         }
         this.actualizarTabla();
         if (window.refreshPassengerFlights) window.refreshPassengerFlights();
@@ -395,3 +404,4 @@ class AdminPanel {
     });
   }
 }
+

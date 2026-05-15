@@ -50,10 +50,11 @@ class Vuelo {
   constructor(id, fecha, estado = 'programado') {
     this.id = id;
     this.fecha = fecha; // "YYYY-MM-DD"
-    this.estado = estado; // 'programado', 'en abordaje', 'finalizado'
+    this.estado = estado; // 'programado', 'en abordaje', 'finalizado', 'cancelado'
     this.tramos = []; // Array de Tramo
     this.avion = new Avion();
     this.reservas = []; // Reserva[]
+    this.motivoCancelacion = null; // Para registrar motivo de cancelación
   }
 
   get origen() { return this.tramos.length > 0 ? this.tramos[0].origen : ''; }
